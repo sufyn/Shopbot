@@ -16,48 +16,75 @@ def search_products(query, max_price=None, sort_by="relevance", category="all"):
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
-        items = data.get("items", [])[:10]  # Get more for filtering
+        items = data.get("items", [])[:10]
         results = []
         for item in items:
             title = item["title"]
             link = f"{item['link']}&tag={AMAZON_ASSOCIATE_TAG}"
-            image = item["image"]["thumbnailLink"] if "image" in item else None
+            image = item["image"]["thumbnailLink"] if "image" in item else "https://via.placeholder.com/100?text=No+Image"
             price_str = item.get("snippet", "").split("$")[1].split(" ")[0] if "$" in item.get("snippet", "") else "N/A"
             price = float(price_str) if price_str != "N/A" and price_str.replace(".", "").isdigit() else None
+            snippet = item.get("snippet", "No description available.")
             if price and max_price and price > max_price:
                 continue
-            results.append({"title": title, "price": price if price else "N/A", "link": link, "image": image})
+            results.append({"title": title, "price": price if price else "N/A", "link": link, "image": image, "snippet": snippet})
         
-        # Sort results
         if sort_by == "price_asc" and any(r["price"] != "N/A" for r in results):
             results = sorted(results, key=lambda x: x["price"] if x["price"] != "N/A" else float("inf"))
         elif sort_by == "price_desc" and any(r["price"] != "N/A" for r in results):
             results = sorted(results, key=lambda x: x["price"] if x["price"] != "N/A" else float("-inf"), reverse=True)
         
-        return results[:5]  # Limit to 5 after filtering/sorting
+        return results[:5]
     except Exception as e:
-        st.error(f"Search failed: {e}. Try again or check your API quota!")
+        st.error(f"Search failed: {e}. Check your API quota or try later!")
         return []
 
-# Custom CSS for a modern, beautiful design
-st.markdown("""
-    <style>
-    .main {background-color: #f8f9fa;}
-    .stTextInput > div > div > input {border-radius: 15px; padding: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);}
-    .stButton > button {background-color: #007bff; color: white; border-radius: 15px; padding: 10px 20px; font-weight: bold;}
-    .stButton > button:hover {background-color: #0056b3;}
-    .card {border: 1px solid #e0e0e0; border-radius: 10px; padding: 15px; background-color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 15px;}
-    .sidebar .sidebar-content {background-color: #ffffff; border-right: 1px solid #ddd;}
-    h1 {color: #343a40; font-family: 'Arial', sans-serif;}
-    h3 {color: #495057;}
-    </style>
-""", unsafe_allow_html=True)
+# Custom CSS with dark mode support
+def load_css(dark_mode=False):
+    if dark_mode:
+        st.markdown("""
+            <style>
+            .main {background-color: #2c2f33; color: #ffffff;}
+            .stTextInput > div > div > input {border-radius: 15px; padding: 12px; background-color: #3a3f44; color: #ffffff; border: 1px solid #555;}
+            .stButton > button {background-color: #7289da; color: white; border-radius: 15px; padding: 10px 20px; font-weight: bold;}
+            .stButton > button:hover {background-color: #5a6eb8;}
+            .card {border: 1px solid #444; border-radius: 10px; padding: 15px; background-color: #36393f; box-shadow: 0 4px 8px rgba(0,0,0,0.2); margin-bottom: 15px;}
+            .sidebar .sidebar-content {background-color: #2f3136; border-right: 1px solid #444; color: #ffffff;}
+            h1, h3 {color: #ffffff;}
+            </style>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+            <style>
+            .main {background-color: #f8f9fa;}
+            .stTextInput > div > div > input {border-radius: 15px; padding: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);}
+            .stButton > button {background-color: #007bff; color: white; border-radius: 15px; padding: 10px 20px; font-weight: bold;}
+            .stButton > button:hover {background-color: #0056b3;}
+            .card {border: 1px solid #e0e0e0; border-radius: 10px; padding: 15px; background-color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 15px;}
+            .sidebar .sidebar-content {background-color: #ffffff; border-right: 1px solid #ddd;}
+            h1 {color: #343a40;}
+            h3 {color: #495057;}
+            </style>
+        """, unsafe_allow_html=True)
+
+# Initialize session state
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "favorites" not in st.session_state:
+    st.session_state.favorites = []
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+if "query_counts" not in st.session_state:
+    st.session_state.query_counts = {}
+
+# Load CSS based on dark mode
+load_css(st.session_state.dark_mode)
 
 # App layout
-st.title("🛒 ShopBot - Discover Deals with Style")
-st.subheader("Search for products and see them come to life with images!")
+st.title("🛒 ShopBot - Your Ultimate Shopping Companion")
+st.subheader("Find products with images, save favorites, and shop smarter!")
 
-# Sidebar for filters and history
+# Sidebar for filters, favorites, and analytics
 with st.sidebar:
     st.header("🔧 Filters")
     max_price = st.slider("Max Price ($)", 0, 1000, 100, step=10)
@@ -66,12 +93,22 @@ with st.sidebar:
     category = st.selectbox("Category", ["all", "electronics", "books", "clothing", "home"])
     if st.button("Reset Filters"):
         max_price, sort_by, category = 100, "relevance", "all"
+    
     st.write("---")
-    st.header("📜 Chat History")
-    if "history" not in st.session_state:
-        st.session_state.history = []
-    for entry in st.session_state.history[-5:]:  # Show last 5 entries
-        st.write(f"**{entry['time']}**: {entry['query']}")
+    st.header("⭐ Favorites")
+    for fav in st.session_state.favorites:
+        st.write(f"- {fav['title']} (${fav['price']})")
+    
+    st.write("---")
+    st.header("📊 Analytics")
+    top_queries = sorted(st.session_state.query_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+    for q, count in top_queries:
+        st.write(f"{q}: {count} searches")
+    
+    st.write("---")
+    if st.button("Toggle Dark Mode"):
+        st.session_state.dark_mode = not st.session_state.dark_mode
+        st.rerun()
 
 # Chat input
 col1, col2 = st.columns([3, 1])
@@ -82,25 +119,29 @@ with col2:
 
 # Process search
 if search_button and query:
-    with st.spinner("🔍 Finding the best deals..."):
+    with st.spinner("🔍 Discovering deals just for you..."):
         results = search_products(query, max_price, sort_by, category)
         if results:
-            # Add to history
+            # Update history and analytics
             st.session_state.history.append({"time": datetime.now().strftime("%H:%M:%S"), "query": query})
+            st.session_state.query_counts[query] = st.session_state.query_counts.get(query, 0) + 1
             st.success(f"Found {len(results)} items for '{query}':")
             for result in results:
                 with st.container():
                     st.markdown("<div class='card'>", unsafe_allow_html=True)
                     col_img, col_info = st.columns([1, 2])
                     with col_img:
-                        if result["image"]:
-                            st.image(result["image"], width=100)
-                        else:
-                            st.write("No image")
+                        st.image(result["image"], width=100, caption="Hover to enlarge")
+                        st.markdown(f"<style>img:hover {{transform: scale(1.5); transition: 0.3s;}}</style>", unsafe_allow_html=True)
                     with col_info:
                         st.write(f"**{result['title']}**")
                         st.write(f"Price: ${result['price']}")
+                        st.write(f"Details: {result['snippet'][:100]}..." if len(result['snippet']) > 100 else result['snippet'])
                         st.markdown(f"[Buy Now]({result['link']})", unsafe_allow_html=True)
+                        if st.button("Add to Favorites", key=result["link"]):
+                            if result not in st.session_state.favorites:
+                                st.session_state.favorites.append(result)
+                                st.success(f"Added '{result['title']}' to favorites!")
                     st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.warning("No results found. Try a different query or category!")
