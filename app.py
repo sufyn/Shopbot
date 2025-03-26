@@ -3,8 +3,8 @@ import requests
 from datetime import datetime
 
 # Google Custom Search credentials (replace with yours)
-GOOGLE_API_KEY = "YOUR_GOOGLE_API_KEY"
-CSE_ID = "YOUR_CSE_ID"
+GOOGLE_API_KEY = "AIzaSyCfjAmnam4j9zK0faKujemRlQcX9V7_VAw"
+CSE_ID = "402346d0d45834b80"
 AMAZON_ASSOCIATE_TAG = "yourid-20"  # Replace with your Amazon Associate Tag
 
 # Function to search products with images
